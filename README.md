@@ -49,10 +49,10 @@ https://github.com/user-attachments/assets/609fa7fc-d3d3-4a92-b0ad-73c4e037cc3b
 - zipkin：请求链路追踪信息可视化ui
 - slueth：发送请求链路追踪信息
 
-##后续计划
--前端部分仍待更改
--聊天记录持久化存在bug，双在线持久化失败
--加入平台辅助创作的RAG-agent
+## 后续计划
+- 前端部分仍待更改 
+- 聊天记录持久化存在bug，双在线持久化失败
+- 加入平台辅助创作的RAG-agent
 
 ## 项目地址
 
