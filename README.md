@@ -1,4 +1,4 @@
-# MirrorSea🌊--视频社区平台
+# MirrorSea🌊--前后端分离的微服务视频社区平台
 
 ## 实现了以下功能：
 - 视频的上传、查看、点赞、评论、收藏、弹幕（有分片上传与断点续传实现）
@@ -22,7 +22,8 @@
 - 技术栈丰富：使用了当下企业开发最常用的可以快速开发单体应用的SpringBoot，保证了下限的基础上引用了SpringCloud系列组件搭建微服务提高上限，并使用了流行中间件Redis、RocketMQ、ElasticSearch，按需引入技术如实时连接Websocket、转码Jave等
 
   ## 项目演示
-https://github.com/user-attachments/assets/109a5b6e-c354-46ef-abf2-14ffede8b725
+https://github.com/user-attachments/assets/609fa7fc-d3d3-4a92-b0ad-73c4e037cc3b
+
 
 ## 技术栈
 - springboot：快速开发Java应用程序
@@ -47,6 +48,11 @@ https://github.com/user-attachments/assets/109a5b6e-c354-46ef-abf2-14ffede8b725
 - xxl-job：分布式可视化定时任务
 - zipkin：请求链路追踪信息可视化ui
 - slueth：发送请求链路追踪信息
+
+##后续计划
+-前端部分仍待更改
+-聊天记录持久化存在bug，双在线持久化失败
+-加入平台辅助创作的RAG-agent
 
 ## 项目地址
 
