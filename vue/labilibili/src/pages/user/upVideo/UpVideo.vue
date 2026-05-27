@@ -51,6 +51,19 @@
             <p class="upload-item-text">简介</p>
             <aTextarea v-model:inputData="upData.intro" :maxLen="1000" @update:modelValue="handleProfileUpdate" />
         </div>
+        <!-- AI 创作辅助 -->
+        <div class="upload-item" v-if="uploadMeta.videoUrl">
+            <CreatorSuggestPanel
+                :user-id="userId"
+                :resumable-identifier="uploadMeta.resumableIdentifier"
+                :video-url="uploadMeta.videoUrl"
+                :draft-title="upData.title"
+                :draft-intro="upData.intro"
+                :tags="tagsData"
+                @adopt-title="onAdoptTitle"
+                @adopt-intro="onAdoptIntro"
+            />
+        </div>
         <!--加入合集设置-->
         <!-- <div class="upload-item">
             <p class="upload-item-text">加入合集</p>
@@ -70,6 +83,7 @@
 import upLoad from './upLoad.vue'
 import aInput from '@/components/public/aInput'
 import aTextarea from '@/components/public/aTextarea.vue'
+import CreatorSuggestPanel from '@/components/creator/CreatorSuggestPanel.vue'
 import { ref, watchEffect, onUpdated } from "vue"
 import { addUpVideo } from "@/api/video"
 import { useUserInfo } from "@/store/userInfo"
@@ -89,24 +103,41 @@ const defaultData = {
     setFolder: 0, // 加入的合集id
 }
 const upData = ref(defaultData)
+const uploadMeta = ref({
+    videoUrl: '',
+    resumableIdentifier: ''
+})
 /**
  * 视频上传回调
  */
 const upload = ref(null);
 
 
-const handleFile = (data, status) => {
+const handleFile = (data, status, resumableIdentifier) => {
     if (status) {
         console.log('123');
         upData.value.file = '',
             upData.value.cover = '',
             coverData.value = ''
+        uploadMeta.value = { videoUrl: '', resumableIdentifier: '' }
         return
     }
     console.log('data', data);
     upData.value.file = data[0];
     upData.value.cover = data[1];
     coverData.value = "data:image/jpg;base64," + data[1]
+    uploadMeta.value = {
+        videoUrl: data[0] || '',
+        resumableIdentifier: resumableIdentifier || ''
+    }
+}
+
+const onAdoptTitle = (title) => {
+    upData.value.title = title
+}
+
+const onAdoptIntro = (intro) => {
+    upData.value.intro = intro
 }
 
 

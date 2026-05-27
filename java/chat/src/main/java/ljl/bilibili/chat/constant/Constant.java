@@ -7,6 +7,9 @@ public class Constant {
     public static final String MESSAGE_TYPE_MESSAGE = "message";
     public static final String MESSAGE_TYPE_REMOVE_SESSION = "removeSession";
     public static final String MESSAGE_TYPE_INIT = "init";
+    public static final String MESSAGE_TYPE_CREATOR_SUBSCRIBE = "creator_subscribe";
+    public static final String MESSAGE_TYPE_CREATOR_SUGGEST = "creator_suggest";
+    public static final String MESSAGE_TASK_ID = "taskId";
     public static final String MESSAGE_CONTENT = "content";
     public static final String MESSAGE_TYPE_SESSIONID = "sessionId";
     public static final String USER_IDENTITY = "userId";

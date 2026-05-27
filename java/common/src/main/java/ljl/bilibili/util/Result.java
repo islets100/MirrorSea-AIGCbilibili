@@ -1,5 +1,6 @@
 package ljl.bilibili.util;
 
+import ljl.bilibili.client.creator.CreatorErrorCode;
 import lombok.Data;
 import org.apache.http.HttpStatus;
 /**
@@ -45,6 +46,17 @@ public class Result<T> {
 
     public static <T> Result<T> error(String msg) {
         return new Result<>(ERROR_CODE, msg, null);
+    }
+
+    /**
+     * 创作辅助等业务错误码，HTTP 仍为 200，code 为文档定义的业务码（如 40001）。
+     */
+    public static <T> Result<T> bizError(int code, String msg) {
+        return new Result<>(code, msg, null);
+    }
+
+    public static <T> Result<T> bizError(CreatorErrorCode errorCode) {
+        return bizError(errorCode.getCode(), errorCode.getUserMessage());
     }
 
 }

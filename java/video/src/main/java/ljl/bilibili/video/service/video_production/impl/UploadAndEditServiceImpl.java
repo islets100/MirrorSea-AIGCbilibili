@@ -311,6 +311,10 @@ public class UploadAndEditServiceImpl implements UploadAndEditService {
             videoName = resumableIdentifier + UUID.randomUUID().toString().substring(0, 10);
             videoCover = uploadPartMap.get(resumableIdentifier).getCover();
             minioService.composePart(resumableIdentifier, videoName);
+            UploadPart mergedPart = uploadPartMap.get(resumableIdentifier);
+            mergedPart.setMergedVideoName(videoName);
+            mergedPart.setMerged(true);
+            uploadPartMap.put(resumableIdentifier, mergedPart);
         }
         List<String> list = new ArrayList<>();
         list.add(videoName);

@@ -9,6 +9,8 @@ spring:
     url: jdbc:mysql://localhost:3306/bilibili?useUnicode=true&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=GMT%2B8
     username: root
     password: user
+  redis:
+    host: localhost
   zipkin:
     base-url: http://localhost:9411
     sender:
@@ -24,3 +26,17 @@ spring:
         server-addr: 127.0.0.1:8848
         register-enabled: true
 module-name: chat
+creator:
+  suggest:
+    idempotent-minutes: 5
+    rate-limit-per-minute: 3
+    asr-poll-interval-ms: 2000
+    asr-timeout-seconds: 120
+  xunfei:
+    spark:
+      host-url: wss://spark-api.xf-yun.com/v3.5/chat
+      domain: generalv3.5
+      credentials:
+        - app-id: xxx
+          api-key: xxx
+          api-secret: xxx

@@ -22,18 +22,22 @@
         <version>2.6.11</version>
     </parent>
     <properties>
+        <java.version>1.8</java.version>
+        <!-- 覆盖 Spring Boot 2.6.11 默认 2.13.x；2.15.4 修复 CVE-2022-42003/42004，兼容 Java 8 -->
+        <jackson-bom.version>2.15.4</jackson-bom.version>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-cloud-alibaba-dependencies.version>2021.0.4.0</spring-cloud-alibaba-dependencies.version>
         <spring-cloud-dependencies.version>2021.0.4</spring-cloud-dependencies.version>
         <lombok.version>1.18.28</lombok.version>
-        <mysql-connector-j.version>8.0.31</mysql-connector-j.version>
+        <mysql-connector-j.version>8.2.0</mysql-connector-j.version>
         <rocketmq-spring-boot-starter.version>2.0.4</rocketmq-spring-boot-starter.version>
         <spring-boot-starter-websocket.version>2.6.11</spring-boot-starter-websocket.version>
         <spring-boot-starter-security.version>2.6.11</spring-boot-starter-security.version>
         <gson.version>2.10.1</gson.version>
-        <spring-boot-starter-data-elasticsearch.version>3.1.2</spring-boot-starter-data-elasticsearch.version>
+        <!-- 与 Spring Boot 2.6.x 对齐；勿用 3.x（需 Java 17） -->
+        <spring-boot-starter-data-elasticsearch.version>2.6.11</spring-boot-starter-data-elasticsearch.version>
         <elasticsearch-rest-high-level-client.version>7.13.3</elasticsearch-rest-high-level-client.version>
         <elasticsearch-rest-client.version>7.13.3</elasticsearch-rest-client.version>
         <elasticsearch.version>7.13.3</elasticsearch.version>
@@ -48,7 +52,7 @@
         </spring-cloud-starter-alibaba-nacos-config.version>
         <knife4j-openapi2-spring-boot-starter.version>4.3.0</knife4j-openapi2-spring-boot-starter.version>
         <mybatis-plus-join-boot-starter.version>1.4.10</mybatis-plus-join-boot-starter.version>
-        <hutool-all.version>5.8.16</hutool-all.version>
+        <hutool-all.version>5.8.44</hutool-all.version>
         <sentinel-core.version>1.8.6</sentinel-core.version>
         <spring-cloud-starter-gateway.version>3.1.4</spring-cloud-starter-gateway.version>
         <javax.servlet-api.version>4.0.1</javax.servlet-api.version>
@@ -69,18 +73,44 @@
         <javase.version>3.5.1</javase.version>
         <guava.version>22.0</guava.version>
         <jave-all-deps.version>3.3.1</jave-all-deps.version>
+        <!-- Java 8 兼容：Tika 2.x 最后支持 JDK8 的分支；勿升到 Tika 3.x（需 Java 17） -->
+        <tika.version>2.9.2</tika.version>
     </properties>
-<!--    <build>-->
-<!--        <plugins>-->
-<!--            <plugin>-->
-<!--                <groupId>org.springframework.boot</groupId>-->
-<!--                <artifactId>spring-boot-maven-plugin</artifactId>-->
-<!--                <version>2.7.7</version>-->
-<!--            </plugin>-->
-<!--        </plugins>-->
-<!--    </build>-->
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.8.1</version>
+                    <configuration>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                        <encoding>${project.build.sourceEncoding}</encoding>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
     <dependencyManagement>
       <dependencies>
+          <dependency>
+              <groupId>com.fasterxml.jackson</groupId>
+              <artifactId>jackson-bom</artifactId>
+              <version>${jackson-bom.version}</version>
+              <type>pom</type>
+              <scope>import</scope>
+          </dependency>
+          <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-core</artifactId>
+              <version>${jackson-bom.version}</version>
+          </dependency>
+          <dependency>
+              <groupId>com.fasterxml.jackson.core</groupId>
+              <artifactId>jackson-databind</artifactId>
+              <version>${jackson-bom.version}</version>
+          </dependency>
           <dependency>
               <groupId>org.springframework.boot</groupId>
               <artifactId>spring-boot-starter-mail</artifactId>
@@ -355,7 +385,16 @@
                 <artifactId>httpclient</artifactId>
                 <version>${httpclient.version}</version> <!-- 使用最新版本 -->
             </dependency>
-
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-parsers-standard-package</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
 
         </dependencies>
     </dependencyManagement>

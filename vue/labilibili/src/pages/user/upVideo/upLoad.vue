@@ -109,7 +109,8 @@ onMounted(() => {
     // 监听完成事件
     resumable.value.on('fileSuccess', (file, data) => {
         status.value = 2
-        emit('handleFile', JSON.parse(data).data)
+        const parsed = JSON.parse(data)
+        emit('handleFile', parsed.data, false, file.uniqueIdentifier)
     });
     // 监听错误事件
     resumable.value.on('fileError', (error) => {

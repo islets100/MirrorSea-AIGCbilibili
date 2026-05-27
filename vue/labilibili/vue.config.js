@@ -27,6 +27,7 @@ module.exports = defineConfig({
     },
     open: true, //自动打开项目
     // NOTE 跨域配置
+    // 本地联调创作辅助：将 /api 与 /wschat 的 target 改为 http://localhost:8200（Gateway）
     proxy: {
       '/api': {
         target: "https://www.labilibili.com",

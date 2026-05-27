@@ -45,3 +45,19 @@ xxl:
       logpath: /data/applogs/xxl-job/jobhandler
 global-exception-handler:
   enabled: true
+creator:
+  rag:
+    knowledge-dir: ../知识库
+    embedding-dims: 256
+    hot-case-play-threshold: 10000
+    chunk-size: 500
+    chunk-overlap: 50
+    retrieve-candidate-size: 50
+    embedding-provider: local
+    admin-token: ""
+  xunfei:
+    embedding:
+      app-id: xxx
+      api-key: xxx
+      api-secret: xxx
+      host-url: https://cn-huabei-1.xf-yun.com/v1/api/embedding

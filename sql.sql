@@ -182,6 +182,21 @@ CREATE TABLE `chat_session` (
   `update_content` varchar(500) DEFAULT NULL,   #会话最近更新的内容
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+## 创作辅助采纳日志表（chat 模块 adopt 落库；user_id 逻辑关联 user.id，task_id 对应 Redis 任务，无物理外键）
+CREATE TABLE `creator_suggest_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `task_id` varchar(64) NOT NULL,  #创作建议任务 ID，对应 Redis creator:task:{taskId}
+  `user_id` int NOT NULL,  #采纳用户 id，逻辑关联 user.id
+  `resumable_identifier` varchar(128) DEFAULT NULL,  #分片上传标识，与提交建议幂等键一致，可选
+  `input_snapshot` text,  #采纳请求 JSON 快照
+  `output_snapshot` text,  #生成结果 JSON 快照
+  `adopted_title` varchar(256) DEFAULT NULL,  #用户采纳的标题
+  `adopted_intro` varchar(1000) DEFAULT NULL,  #用户采纳的简介
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,  #记录创建时间
+  PRIMARY KEY (`id`),
+  KEY `idx_task_id` (`task_id`),
+  KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
     ## 创建新增播放数据触发器，一旦在播放表插入记录则将对应视频的播放量加一  注意下方xxx代表springboot配置文件中连接数据库时实际所用用户名
 CREATE DEFINER=`xxx`@`%` TRIGGER `increment_play_count` AFTER INSERT ON `play` FOR EACH ROW BEGIN
     UPDATE video_data

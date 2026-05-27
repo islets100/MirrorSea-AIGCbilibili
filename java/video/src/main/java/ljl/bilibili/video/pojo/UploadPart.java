@@ -12,4 +12,7 @@ public class UploadPart {
     Integer totalCount=0;
     Boolean hasCutImg=false;
     String cover="";
+    /** 合并完成后的 MinIO 对象名 */
+    String mergedVideoName="";
+    Boolean merged=false;
 }

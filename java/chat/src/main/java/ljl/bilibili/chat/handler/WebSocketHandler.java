@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import ljl.bilibili.chat.entity.ChatMessage;
 import ljl.bilibili.chat.event.MessageEvent;
+import ljl.bilibili.chat.creator.event.CreatorSuggestEvent;
 import ljl.bilibili.client.notice.SendNoticeClient;
 import ljl.bilibili.entity.chat.Chat;
 import ljl.bilibili.entity.user_center.user_info.User;
@@ -41,6 +42,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
     public static volatile ConcurrentMap<String, WebSocketSession> WEB_SOCKET_SESSION_CONCURRENT_MAP = new ConcurrentHashMap<>();
     public static  Map<String, String> USERID_TO_SESSIONID_MAP = new ConcurrentHashMap<>();
     public static volatile ConcurrentMap<String, BigModelHandler> BIGMODEL_MAP = new ConcurrentHashMap<>();
+    /** taskId -> userId，用于创作建议 WS 推送 */
+    public static volatile ConcurrentMap<String, String> CREATOR_TASK_USER_MAP = new ConcurrentHashMap<>();
     @Resource
     ChatMapper chatMapper;
 
@@ -56,6 +59,21 @@ public class WebSocketHandler extends TextWebSocketHandler {
         jsonText.addProperty(MESSAGE_TYPE, MESSAGE_TYPE_BIGMODEL);
         jsonText.addProperty(MESSAGE_CONTENT, message.getContent());
         WEB_SOCKET_SESSION_CONCURRENT_MAP.get(USERID_TO_SESSIONID_MAP.get(message.getUserId())).sendMessage(new TextMessage(jsonText.toString()));
+    }
+
+    @EventListener
+    @Async
+    public void handleCreatorSuggestEvent(CreatorSuggestEvent event) throws IOException {
+        String userId = event.getUserId();
+        String sessionId = USERID_TO_SESSIONID_MAP.get(userId);
+        if (sessionId == null) {
+            log.warn("Creator suggest push skipped, user offline: {}", userId);
+            return;
+        }
+        WebSocketSession session = WEB_SOCKET_SESSION_CONCURRENT_MAP.get(sessionId);
+        if (session != null && session.isOpen()) {
+            session.sendMessage(new TextMessage(event.getPayloadJson()));
+        }
     }
     /**
      *根据type处理接收的私聊与大模型消息
@@ -128,6 +146,25 @@ public class WebSocketHandler extends TextWebSocketHandler {
             case MESSAGE_TYPE_REMOVE_SESSION:
                 String chatToBigModelUserId = json.get(USER_IDENTITY).getAsString();
                 BIGMODEL_MAP.get(chatToBigModelUserId).removeSession();
+                break;
+            case MESSAGE_TYPE_CREATOR_SUBSCRIBE:
+                String subscribeTaskId = json.get(MESSAGE_TASK_ID).getAsString();
+                String subscribeUserId = json.get(USER_IDENTITY).getAsString();
+                String owner = CREATOR_TASK_USER_MAP.get(subscribeTaskId);
+                if (owner != null && !owner.equals(subscribeUserId)) {
+                    log.warn("Creator subscribe denied taskId={}, owner={}, subscriber={}",
+                            subscribeTaskId, owner, subscribeUserId);
+                    JsonObject err = new JsonObject();
+                    err.addProperty("type", MESSAGE_TYPE_CREATOR_SUGGEST);
+                    err.addProperty(MESSAGE_TASK_ID, subscribeTaskId);
+                    err.addProperty("status", -1);
+                    err.addProperty("errorCode", 40301);
+                    err.addProperty("message", "无权订阅该任务");
+                    session.sendMessage(new TextMessage(err.toString()));
+                    break;
+                }
+                CREATOR_TASK_USER_MAP.put(subscribeTaskId, subscribeUserId);
+                log.info("Creator task subscribed taskId={}, userId={}", subscribeTaskId, subscribeUserId);
                 break;
                     default:
                 break;

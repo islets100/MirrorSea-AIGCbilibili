@@ -1,3 +1,7 @@
 {
-    "java.compile.nullAnalysis.mode": "automatic"
+    "java.compile.nullAnalysis.mode": "automatic",
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.configuration.maven.userSettings": null,
+    "java.import.maven.enabled": true,
+    "java.jdt.ls.java.release": "8"
 }

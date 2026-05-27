@@ -8,7 +8,7 @@ import org.springframework.context.annotation.ComponentScan;
 
 @SpringBootApplication
 @EnableFeignClients(basePackages = "ljl.bilibili.client")
-@MapperScan(basePackages = {"ljl.bilibili.mapper","ljl.bilibili.chat.mapper"})
+@MapperScan(basePackages = {"ljl.bilibili.mapper", "ljl.bilibili.chat.mapper", "ljl.bilibili.chat.creator.mapper"})
 @ComponentScan(basePackages = "ljl.*")
 public class ChatApplication {
     public static void main(String[] args) {

@@ -12,7 +12,7 @@ spring:
     sleuth:
       sampler:
         probability: 1 # sleuth 日志记录采样率，1为100%，默认为0.1即10%
-  cloud:
+  # cloud:
 #    nacos:
 #      discovery:
 #        server-addr: 116.62.71.84:8848
