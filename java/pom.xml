@@ -75,6 +75,9 @@
         <jave-all-deps.version>3.3.1</jave-all-deps.version>
         <!-- Java 8 兼容：Tika 2.x 最后支持 JDK8 的分支；勿升到 Tika 3.x（需 Java 17） -->
         <tika.version>2.9.2</tika.version>
+        <java-websocket.version>1.5.7</java-websocket.version>
+        <okhttp.version>4.12.0</okhttp.version>
+        <okio.version>3.6.0</okio.version>
     </properties>
     <build>
         <pluginManagement>
@@ -130,19 +133,22 @@
           <dependency>
               <groupId>org.java-websocket</groupId>
               <artifactId>Java-WebSocket</artifactId>
-              <version>1.3.8</version>
+              <version>${java-websocket.version}</version>
           </dependency>
-          <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
           <dependency>
               <groupId>com.squareup.okhttp3</groupId>
               <artifactId>okhttp</artifactId>
-              <version>4.10.0</version>
+              <version>${okhttp.version}</version>
           </dependency>
-          <!-- https://mvnrepository.com/artifact/com.squareup.okio/okio -->
           <dependency>
               <groupId>com.squareup.okio</groupId>
               <artifactId>okio</artifactId>
-              <version>2.10.0</version>
+              <version>${okio.version}</version>
+          </dependency>
+          <dependency>
+              <groupId>com.squareup.okio</groupId>
+              <artifactId>okio-jvm</artifactId>
+              <version>${okio.version}</version>
           </dependency>
           <dependency>
               <groupId>ws.schild</groupId>
