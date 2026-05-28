@@ -1,16 +1,19 @@
 package ljl.bilibili.search.rag.service.impl;
 
-import com.alibaba.fastjson.JSON;
+import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.Metadata;
+import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
+import dev.langchain4j.data.document.parser.apache.tika.ApacheTikaDocumentParser;
+import dev.langchain4j.data.document.DocumentSplitter;
+import dev.langchain4j.data.document.splitter.DocumentSplitters;
+import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.store.embedding.EmbeddingStore;
 import ljl.bilibili.search.rag.config.CreatorRagProperties;
-import ljl.bilibili.search.rag.constant.RagConstant;
-import ljl.bilibili.search.rag.service.EmbeddingService;
 import ljl.bilibili.search.rag.service.KnowledgeIngestService;
+import ljl.bilibili.search.rag.support.RagSegmentIngestor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tika.Tika;
-import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.common.xcontent.XContentType;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -18,11 +21,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Stream;
 
 @Service
@@ -30,23 +30,28 @@ import java.util.stream.Stream;
 public class KnowledgeIngestServiceImpl implements KnowledgeIngestService {
 
     @Resource
-    private RestHighLevelClient restHighLevelClient;
+    @Qualifier("knowledgeEmbeddingStore")
+    private EmbeddingStore<TextSegment> knowledgeEmbeddingStore;
 
     @Resource
-    private EmbeddingService embeddingService;
+    private EmbeddingModel creatorEmbeddingModel;
 
     @Resource
     private CreatorRagProperties creatorRagProperties;
 
-    private final Tika tika = new Tika();
+    private final ApacheTikaDocumentParser documentParser = new ApacheTikaDocumentParser();
 
     @Override
     public int ingest() {
+        knowledgeEmbeddingStore.removeAll();
         Path knowledgeDir = Paths.get(creatorRagProperties.getKnowledgeDir()).toAbsolutePath().normalize();
         if (!Files.isDirectory(knowledgeDir)) {
             log.warn("Knowledge directory not found: {}", knowledgeDir);
             return 0;
         }
+        DocumentSplitter splitter = DocumentSplitters.recursive(
+                creatorRagProperties.getChunkSize(),
+                creatorRagProperties.getChunkOverlap());
         int count = 0;
         try (Stream<Path> paths = Files.walk(knowledgeDir)) {
             List<Path> files = new ArrayList<>();
@@ -54,12 +59,12 @@ public class KnowledgeIngestServiceImpl implements KnowledgeIngestService {
                     .filter(this::supportedFile)
                     .forEach(files::add);
             for (Path file : files) {
-                count += ingestFile(file, knowledgeDir);
+                count += ingestFile(file, knowledgeDir, splitter);
             }
         } catch (IOException e) {
             log.error("Knowledge ingest failed", e);
         }
-        log.info("Knowledge ingest completed, chunks={}", count);
+        log.info("Knowledge ingest completed (LangChain4j), chunks={}", count);
         return count;
     }
 
@@ -68,72 +73,34 @@ public class KnowledgeIngestServiceImpl implements KnowledgeIngestService {
         return name.endsWith(".md") || name.endsWith(".txt") || name.endsWith(".pdf");
     }
 
-    private int ingestFile(Path file, Path rootDir) {
-        String text;
+    private int ingestFile(Path file, Path rootDir, DocumentSplitter splitter) {
         try {
-            text = tika.parseToString(file);
+            Document document = FileSystemDocumentLoader.loadDocument(file, documentParser);
+            if (document.text() == null || document.text().trim().isEmpty()) {
+                return 0;
+            }
+            String relativePath = rootDir.relativize(file).toString().replace('\\', '/');
+            String category = guessCategory(relativePath);
+            Metadata baseMeta = new Metadata()
+                    .put("source_file", relativePath)
+                    .put("category", category);
+            Document enriched = Document.from(document.text(), baseMeta);
+            List<TextSegment> segments = splitter.split(enriched);
+            List<TextSegment> withIds = new ArrayList<>();
+            for (int i = 0; i < segments.size(); i++) {
+                String chunkId = "kb_" + relativePath.replaceAll("[^a-zA-Z0-9]", "_") + "_" + i;
+                Metadata chunkMeta = new Metadata()
+                        .put("chunk_id", chunkId)
+                        .put("source_file", relativePath)
+                        .put("category", category);
+                withIds.add(TextSegment.from(segments.get(i).text(), chunkMeta));
+            }
+            RagSegmentIngestor.ingest(creatorEmbeddingModel, knowledgeEmbeddingStore, withIds);
+            return withIds.size();
         } catch (Exception e) {
-            log.warn("Failed to parse file: {}", file, e);
+            log.warn("Failed to ingest file: {}", file, e);
             return 0;
         }
-        if (text == null || text.trim().isEmpty()) {
-            return 0;
-        }
-        try {
-            return indexChunks(file, rootDir, text);
-        } catch (IOException e) {
-            log.error("Failed to index file: {}", file, e);
-            return 0;
-        }
-    }
-
-    private int indexChunks(Path file, Path rootDir, String text) throws IOException {
-        String relativePath = rootDir.relativize(file).toString().replace('\\', '/');
-        List<String> chunks = splitText(text);
-        int count = 0;
-        for (int i = 0; i < chunks.size(); i++) {
-            String chunk = chunks.get(i);
-            String chunkId = "kb_" + relativePath.replaceAll("[^a-zA-Z0-9]", "_") + "_" + i;
-            Map<String, Object> doc = new HashMap<>();
-            doc.put("chunk_id", chunkId);
-            doc.put("source_file", relativePath);
-            doc.put("category", guessCategory(relativePath));
-            doc.put("content", chunk);
-            doc.put("updated_at", Instant.now().toString());
-            doc.put("content_vector", embeddingService.embed(chunk));
-
-            IndexRequest indexRequest = new IndexRequest(RagConstant.KNOWLEDGE_INDEX)
-                    .id(chunkId)
-                    .source(JSON.toJSONString(doc), XContentType.JSON);
-            try {
-                restHighLevelClient.index(indexRequest, RequestOptions.DEFAULT);
-            } catch (Exception e) {
-                throw new IOException(e);
-            }
-            count++;
-        }
-        return count;
-    }
-
-    private List<String> splitText(String text) {
-        int chunkSize = creatorRagProperties.getChunkSize();
-        int overlap = creatorRagProperties.getChunkOverlap();
-        List<String> chunks = new ArrayList<>();
-        String normalized = text.replaceAll("\\s+", " ").trim();
-        if (normalized.length() <= chunkSize) {
-            chunks.add(normalized);
-            return chunks;
-        }
-        int start = 0;
-        while (start < normalized.length()) {
-            int end = Math.min(start + chunkSize, normalized.length());
-            chunks.add(normalized.substring(start, end));
-            if (end >= normalized.length()) {
-                break;
-            }
-            start = Math.max(0, end - overlap);
-        }
-        return chunks;
     }
 
     private static String guessCategory(String path) {

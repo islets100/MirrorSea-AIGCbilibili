@@ -2,7 +2,7 @@
 
 > 最后更新：**2026-05-27**  
 > 设计基线：`api-design.md` v1.0 · `architecture-design.md` v1.0  
-> 构建验证：`mvn clean install -DskipTests -U`（全模块 SUCCESS）
+> 构建验证：`mvn -pl search,chat -am clean compile`（SUCCESS）；全量 `mvn clean install -DskipTests` 建议在本地复跑
 
 ---
 
@@ -24,7 +24,7 @@
 
 | 阶段 | 内容 | 模块 | 状态 | 交付物摘要 |
 |------|------|------|------|------------|
-| **P0** | ES 索引 + ingest + retrieve | search | ✅ | `rag/*`：`RagController`（retrieve + 2 ingest）、`XunfeiEmbeddingService` / `LocalEmbeddingService`、`HotCaseIngestService`、`KnowledgeIngestService`（Tika）、ingest 鉴权 `X-Admin-Token` |
+| **P0** | ES 8 向量库 + ingest + retrieve | search | ✅ | **LangChain4j**：`BgeSmallZhQuantizedEmbeddingModel` + `ElasticsearchEmbeddingStore`；`KnowledgeIngestService` / `HotCaseIngestService`（Tika + `DocumentSplitters`）；`RagRetrieveService`（`EmbeddingSearchRequest` + 分数归一化）；Feign/API 契约未变 |
 | **P1** | ASR + 上传上下文 API | video | ✅ | `creator/*`：`CreatorContextController`（context / asr submit·poll）、`XunfeiAsrClient`、异步 `AsrTaskServiceImpl` |
 | **P2** | Agent + REST/WS + 凭证池 | chat | ✅ | `CreatorController`（4 REST）、`CreatorSuggestServiceImpl` 编排、`CreatorSparkStreamHandler`、`SparkCredentialPool`、`CreatorSuggestLog` + adopt、`WebSocketHandler` 扩展 creator 事件 |
 | **P3** | UpVideo UI | vue | ✅ | `components/creator/CreatorSuggestPanel.vue`、`api/creator.js`、`UpVideo.vue` / `upLoad.vue` 集成、`vue.config.js` 代理 |
@@ -82,7 +82,8 @@
 |----|------|------|
 | `creator_suggest_log` DDL | ✅ | 根目录 `sql.sql`（`chat_session` 之后） |
 | 配置说明 | ✅ | `config-guide.md` |
-| 星火 / ASR / Embedding 配置项 | ✅ 模板 | 各模块 `application.yml`（占位 `xxx`，勿提交真密钥） |
+| 星火 / ASR 配置项 | ✅ 模板 | chat / video `application.yml`（勿提交真密钥） |
+| RAG（search） | ✅ | 进程内 BGE ONNX；`embedding-dims: 512`；无需讯飞 Embedding |
 | 提示词模板 | ✅ | `chat/src/main/resources/prompts/` |
 
 ---
@@ -109,7 +110,8 @@
 | Hutool | ✅ | `5.8.44` |
 | MySQL Connector/J | ✅ | `8.2.0` |
 | Tika（search） | ✅ | `2.9.2`（Java 8 兼容，勿升 3.x） |
-| Elasticsearch Starter | ✅ | 对齐 Boot `2.6.11`（勿用 3.x） |
+| Elasticsearch | ✅ | **8.15.3**（`docker-compose` + `elasticsearch-java`）；HLRC 已移除，search 统一 `ElasticsearchClient` |
+| LangChain4j RAG | ✅ | BOM `0.36.2`：`langchain4j-elasticsearch`、`embeddings-bge-small-zh-q`、`document-parser-apache-tika` |
 | `video/application.yml` | ✅ | 修复空 `spring.cloud:` 导致 YAML 解析错误 |
 | IDE | ✅ | `.idea/misc.xml` JDK 1.8；`.vscode` `java.jdt.ls.java.release=8` |
 
@@ -122,7 +124,17 @@
 - [ ] 配置真密钥后 ASR → RAG → 星火流式端到端成功（需本地密钥）
 - [x] 前端四 API 封装 + 面板组件；断 WS 后轮询逻辑已实现
 - [x] adopt 写入 `creator_suggest_log`（Mapper + Service）
-- [x] `mvn clean install -DskipTests` 全模块通过
+- [x] `mvn clean install -DskipTests` 全模块通过（含 search LangChain4j 迁移后）
+
+### LangChain4j RAG 迁移验收（2026-05-27）
+
+| 项 | 状态 |
+|----|------|
+| `mvn clean install -DskipTests` | ✅ |
+| `SearchServiceImpl` / `MysqlToEs` → `ElasticsearchClient` | ✅ |
+| Feign `RagRetrieveRequest` / `RagController` 路径未变 | ✅ |
+| ES 8 清卷 + re-ingest + retrieve 实测 | ⏳ 需本地起 ES 8.15 后执行（见 `config-guide` §5） |
+| chat `CreatorSuggestServiceImpl` 端到端 | ⏳ 依赖上项 + 星火密钥 |
 
 ---
 
@@ -130,7 +142,7 @@
 
 | 优先级 | 项 | 说明 |
 |--------|-----|------|
-| P4 | 端到端联调 | Gateway `8200` 代理 `/api`、`/wschat`；首次 RAG ingest |
+| P4 | 端到端联调 | ES 8 清卷后 **全量 re-ingest** + `mysqlToEs`；Gateway 代理；星火/ASR 真密钥 |
 | 低 | `adopt` 补写 `resumable_identifier` | 表字段已预留，写入逻辑可加强 |
 | 低 | chat 包结构收敛 | 顶层扁包 + `creator/` 竖切并存，不影响功能 |
 | 生产 | 观测与熔断 | Sentinel/指标/任务持久化等 architecture §9 建议 |
@@ -142,6 +154,7 @@
 | 日期 | 摘要 |
 |------|------|
 | 2026-05-27 | MVP 编码完成；DDL 并入 `sql.sql`；Java 8 + 依赖安全加固；YAML/IDE 修复；全模块 Maven 构建通过 |
+| 2026-05-27 | **RAG 迁移 LangChain4j**：ES 8.15 + `ElasticsearchClient`；BGE-small-zh-q（512 维）；删除讯飞/本地手写 Embedding 与 HLRC；`config-guide` 补充 ES 重建与 re-ingest 步骤 |
 | — | 初始设计基线：`api-design.md`、`architecture-design.md`、`config-guide.md` |
 
 ---

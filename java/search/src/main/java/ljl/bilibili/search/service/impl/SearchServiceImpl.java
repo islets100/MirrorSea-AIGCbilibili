@@ -1,289 +1,265 @@
 package ljl.bilibili.search.service.impl;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.SortOrder;
+import co.elastic.clients.elasticsearch._types.mapping.Property;
+import co.elastic.clients.elasticsearch._types.mapping.TypeMapping;
+import co.elastic.clients.elasticsearch._types.query_dsl.MoreLikeThisQuery;
+import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
+import co.elastic.clients.elasticsearch.core.IndexRequest;
+import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.core.search.TotalHits;
+import co.elastic.clients.elasticsearch.core.search.TotalHitsRelation;
+import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
+import co.elastic.clients.elasticsearch.indices.DeleteIndexRequest;
+import co.elastic.clients.elasticsearch.indices.ExistsRequest;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import ljl.bilibili.entity.user_center.user_relationships.Follow;
-import ljl.bilibili.client.pojo.RecommendVideo;
-import ljl.bilibili.mapper.user_center.user_relationships.FollowMapper;
-import ljl.bilibili.search.service.SearchService;
-import ljl.bilibili.search.vo.request.EsKeywordRequest;
-import ljl.bilibili.search.vo.response.UserKeyWordSearchResponse;
-import ljl.bilibili.util.Result;
-import org.elasticsearch.index.query.MoreLikeThisQueryBuilder.Item;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import ljl.bilibili.search.vo.response.TotalCountSearchResponse;
-import ljl.bilibili.search.vo.response.VideoKeywordSearchResponse;
+import ljl.bilibili.client.pojo.RecommendVideo;
+import ljl.bilibili.entity.user_center.user_relationships.Follow;
+import ljl.bilibili.mapper.user_center.user_relationships.FollowMapper;
+import ljl.bilibili.search.service.SearchService;
 import ljl.bilibili.search.vo.request.EsIndexRequest;
+import ljl.bilibili.search.vo.request.EsKeywordRequest;
+import ljl.bilibili.search.vo.response.TotalCountSearchResponse;
+import ljl.bilibili.search.vo.response.UserKeyWordSearchResponse;
+import ljl.bilibili.search.vo.response.VideoKeywordSearchResponse;
+import ljl.bilibili.util.Result;
 import lombok.extern.slf4j.Slf4j;
-import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
-import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.search.*;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.indices.CreateIndexRequest;
-import org.elasticsearch.client.indices.GetIndexRequest;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.query.MultiMatchQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
-import org.elasticsearch.search.sort.SortOrder;
 import org.springframework.stereotype.Service;
+
 import javax.annotation.Resource;
 import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static ljl.bilibili.search.constant.Constant.*;
+
 /**
- *搜索相关
+ * 搜索相关（Elasticsearch 8.x Java API Client）
  */
 @Service
 @Slf4j
 public class SearchServiceImpl implements SearchService {
+
     @Resource
-    public RestHighLevelClient client;
-    final int size = 20;
+    private ElasticsearchClient client;
+
+    private final int size = 20;
+
     @Resource
-    FollowMapper followMapper;
+    private FollowMapper followMapper;
+
     @Resource
-    ObjectMapper objectMapper;
-    /**
-     *获取用户、视频总匹配文档数和页数
-     */
-@Override
+    private ObjectMapper objectMapper;
+
+    @Override
     public Result<TotalCountSearchResponse> totalKeywordSearch(String keyword) {
-    SearchRequest videoSearchRequest = new SearchRequest(VIDEO_INDEX_NAME);
-        SearchSourceBuilder videoSearchSourceBuilder = new SearchSourceBuilder();
-        videoSearchSourceBuilder.query(QueryBuilders.multiMatchQuery(keyword, MULTI_QUERY_VIDEO_NAME, MULTI_QUERY_AUTHOR_NAME, MULTI_QUERY_INTRO)
-                .type(MultiMatchQueryBuilder.Type.MOST_FIELDS));
-        videoSearchSourceBuilder.minScore(1.0f);
-        videoSearchSourceBuilder.sort(ORDER_BY_SCORE, SortOrder.DESC);
-        videoSearchSourceBuilder.fetchSource(true);
-        videoSearchRequest.source(videoSearchSourceBuilder);
-        SearchRequest userSearchRequest = new SearchRequest(USER_INDEX_NAME);
-        SearchSourceBuilder userSearchSourceBuilder = new SearchSourceBuilder();
-        userSearchSourceBuilder.minScore(1.0f);
-        userSearchSourceBuilder.query(QueryBuilders.multiMatchQuery(keyword, MULTI_QUERY_NICKNAME, MULTI_QUERY_INTRO)
-                .type(MultiMatchQueryBuilder.Type.MOST_FIELDS));
-        userSearchSourceBuilder.sort(ORDER_BY_SCORE, SortOrder.DESC);
-        userSearchSourceBuilder.fetchSource(true);
-        userSearchRequest.source(userSearchSourceBuilder);
-        SearchResponse videoResponse;
-        SearchResponse userResponse;
         try {
-            videoResponse = client.search(videoSearchRequest, RequestOptions.DEFAULT);
-            userResponse = client.search(userSearchRequest, RequestOptions.DEFAULT);
+            long totalVideoCount = countByMultiMatch(VIDEO_INDEX_NAME, keyword,
+                    MULTI_QUERY_VIDEO_NAME, MULTI_QUERY_AUTHOR_NAME, MULTI_QUERY_INTRO);
+            long totalUserCount = countByMultiMatch(USER_INDEX_NAME, keyword,
+                    MULTI_QUERY_NICKNAME, MULTI_QUERY_INTRO);
+            long totalVideoPages = totalVideoCount / size + (totalVideoCount % size == 0 ? 0 : 1);
+            long totalUserPages = totalUserCount / size + (totalUserCount % size == 0 ? 0 : 1);
+            return Result.data(new TotalCountSearchResponse()
+                    .setTotalVideoPage(totalVideoPages)
+                    .setTotalVideoNum(totalVideoCount)
+                    .setTotalUserNum(totalUserCount)
+                    .setTotalUserPage(totalUserPages));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        long totalVideoCount = videoResponse.getHits().getTotalHits().value;
-        long totalVideoPages = totalVideoCount / size + (totalVideoCount % size == 0 ? 0 : 1);
-        long totalUserCount = userResponse.getHits().getTotalHits().value;
-        long totalUserPages = totalUserCount / size + (totalUserCount % size == 0 ? 0 : 1);
-
-        return Result.data(new TotalCountSearchResponse().setTotalVideoPage(totalVideoPages).setTotalVideoNum(totalVideoCount)
-                .setTotalUserNum(totalUserCount).setTotalUserPage(totalUserPages));
     }
-    /**
-     *添加搜索记录
-     */
+
     @Override
     public Result<Boolean> addKeywordSearchRecord(EsKeywordRequest esKeywordRequest) throws IOException {
-        IndexRequest indexRequest = new IndexRequest(HISTORY_SEARCH_INDEX_NAME);
-        indexRequest.source(objectMapper.convertValue(esKeywordRequest, Map.class), XContentType.JSON);
-        client.index(indexRequest, RequestOptions.DEFAULT);
+        Map<String, Object> doc = objectMapper.convertValue(esKeywordRequest, Map.class);
+        client.index(IndexRequest.of(i -> i.index(HISTORY_SEARCH_INDEX_NAME).document(doc)));
         return Result.success(true);
     }
-    /**
-     *获取某一页的匹配视频数据
-     */
-    @Override
-    public Result<List<VideoKeywordSearchResponse>> videoPageKeywordSearch(String keyword, int pageNumber, Integer type) throws JsonProcessingException {
-        List<VideoKeywordSearchResponse> videoKeywordSearchResponses = new ArrayList<>();
-        SearchRequest searchRequest = new SearchRequest(VIDEO_INDEX_NAME);
-        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchSourceBuilder.query(QueryBuilders.multiMatchQuery(keyword, MULTI_QUERY_VIDEO_NAME, MULTI_QUERY_AUTHOR_NAME, MULTI_QUERY_INTRO)
-                .type(MultiMatchQueryBuilder.Type.MOST_FIELDS));
-        searchSourceBuilder.minScore(1.0f);
-        if (type == 0) {
-            searchSourceBuilder.sort(ORDER_BY_SCORE, SortOrder.DESC);
-        } else if (type == 1) {
-            searchSourceBuilder.sort(ORDER_BY_PLAY_COUNT, SortOrder.DESC);
-        } else if (type == 2) {
-            searchSourceBuilder.sort(ORDER_BY_CREATE_TIME, SortOrder.DESC);
-        } else if (type == 3) {
-            searchSourceBuilder.sort(ORDER_BY_DANMAKU_COUNT, SortOrder.DESC);
-        } else {
-            searchSourceBuilder.sort(ORDER_BY_COLLECT_COUNT, SortOrder.DESC);
-        }
 
-        searchSourceBuilder.fetchSource(true);
-        searchRequest.source(searchSourceBuilder);
-        SearchResponse response;
-        searchSourceBuilder.size(size);
-        searchSourceBuilder.from((pageNumber - 1) * size);
-        try {
-            response = client.search(searchRequest, RequestOptions.DEFAULT);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        for (SearchHit hit : response.getHits().getHits()) {
-            videoKeywordSearchResponses.add(objectMapper.readValue(hit.getSourceAsString(), VideoKeywordSearchResponse.class));
-        }
-        return Result.data(videoKeywordSearchResponses);
-    }
-    /**
-     *获取某一页的匹配用户数据
-     */
     @Override
-    public Result<List<UserKeyWordSearchResponse>> userPageKeywordSearch(String keyword, int pageNumber, Integer type, Integer userId) throws JsonProcessingException {
-        List<UserKeyWordSearchResponse> userKeyWordSearchResponses = new ArrayList<>();
-        SearchRequest searchRequest = new SearchRequest(USER_INDEX_NAME);
-        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchSourceBuilder.query(QueryBuilders.multiMatchQuery(keyword, MULTI_QUERY_NICKNAME, MULTI_QUERY_INTRO)
-                .type(MultiMatchQueryBuilder.Type.MOST_FIELDS));
-        if (type == 0) {
-            searchSourceBuilder.sort(ORDER_BY_SCORE, SortOrder.DESC);
-        } else if (type == 1) {
-            searchSourceBuilder.sort(ORDER_BY_FANS_COUNT, SortOrder.DESC);
-        } else {
-            searchSourceBuilder.sort(ORDER_BY_FANS_COUNT, SortOrder.ASC);
-        }
-        searchSourceBuilder.fetchSource(true);
-        searchRequest.source(searchSourceBuilder);
-        List<Integer> ids = new ArrayList<>();
-        SearchResponse response;
-        searchSourceBuilder.size(size);
-        searchSourceBuilder.from((pageNumber - 1) * size);
+    public Result<List<VideoKeywordSearchResponse>> videoPageKeywordSearch(String keyword, int pageNumber, Integer type)
+            throws JsonProcessingException {
         try {
-            response = client.search(searchRequest, RequestOptions.DEFAULT);
+            String sortField = resolveVideoSortField(type);
+            SearchResponse<VideoKeywordSearchResponse> response = client.search(s -> s
+                            .index(VIDEO_INDEX_NAME)
+                            .from((pageNumber - 1) * size)
+                            .size(size)
+                            .minScore(1.0)
+                            .query(multiMatchQuery(keyword, MULTI_QUERY_VIDEO_NAME, MULTI_QUERY_AUTHOR_NAME, MULTI_QUERY_INTRO))
+                            .sort(so -> so.field(f -> f.field(sortField).order(SortOrder.Desc))),
+                    VideoKeywordSearchResponse.class);
+            return Result.data(hitsToList(response));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        for (SearchHit hit : response.getHits().getHits()) {
-            ids.add( Integer.valueOf((String) hit.getSourceAsMap().get(INDEX_ID)));
-            userKeyWordSearchResponses.add(objectMapper.readValue(hit.getSourceAsString(), UserKeyWordSearchResponse.class));
-        }
-        Set<Integer> followSet = new HashSet(10);
-        LambdaQueryWrapper<Follow> followLambdaQueryWrapper = new LambdaQueryWrapper<>();
-        followLambdaQueryWrapper.eq(Follow::getFansId, userId);
-        List<Follow> follows = followMapper.selectList(followLambdaQueryWrapper);
-        for (Follow follow : follows) {
-            followSet.add(follow.getIdolId());
-        }
-        userKeyWordSearchResponses.forEach(userKeyWordSearchResponse -> {
-            if (followSet.contains(userKeyWordSearchResponse.getId())) {
-                userKeyWordSearchResponse.setIsFollow(true);
-            } else {
-                userKeyWordSearchResponse.setIsFollow(false);
-            }
-        });
-        return Result.data(userKeyWordSearchResponses);
     }
-    /**
-     *搜索但未确认时类似关键字查询
-     */
+
+    @Override
+    public Result<List<UserKeyWordSearchResponse>> userPageKeywordSearch(String keyword, int pageNumber, Integer type,
+            Integer userId) throws JsonProcessingException {
+        try {
+            SortOrder fansOrder = (type != null && type == 2) ? SortOrder.Asc : SortOrder.Desc;
+            String sortField = (type != null && type == 0) ? ORDER_BY_SCORE : ORDER_BY_FANS_COUNT;
+            SearchResponse<UserKeyWordSearchResponse> response = client.search(s -> s
+                            .index(USER_INDEX_NAME)
+                            .from((pageNumber - 1) * size)
+                            .size(size)
+                            .query(multiMatchQuery(keyword, MULTI_QUERY_NICKNAME, MULTI_QUERY_INTRO))
+                            .sort(so -> so.field(f -> f.field(sortField).order(
+                                    ORDER_BY_SCORE.equals(sortField) ? SortOrder.Desc : fansOrder))),
+                    UserKeyWordSearchResponse.class);
+            List<UserKeyWordSearchResponse> list = hitsToList(response);
+            Set<Integer> followSet = new HashSet<>();
+            LambdaQueryWrapper<Follow> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(Follow::getFansId, userId);
+            for (Follow follow : followMapper.selectList(wrapper)) {
+                followSet.add(follow.getIdolId());
+            }
+            for (UserKeyWordSearchResponse item : list) {
+                item.setIsFollow(followSet.contains(item.getId()));
+            }
+            return Result.data(list);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Override
     public Result<List<String>> likelyKeywordSearch(String searchWord) throws IOException {
-        SearchRequest searchRequest = new SearchRequest(HISTORY_SEARCH_INDEX_NAME);
+        SearchResponse<EsKeywordRequest> response = client.search(s -> s
+                        .index(HISTORY_SEARCH_INDEX_NAME)
+                        .query(multiMatchQuery(searchWord, MULTI_QUERY_SEARCH_WORD)),
+                EsKeywordRequest.class);
         List<String> list = new ArrayList<>();
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
-        sourceBuilder.query(QueryBuilders.multiMatchQuery(searchWord, MULTI_QUERY_SEARCH_WORD));
-        searchRequest.source(sourceBuilder);
-        SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
-        for (SearchHit searchHit : searchResponse.getHits().getHits()) {
-            EsKeywordRequest keywordRequest = objectMapper.readValue(searchHit.getSourceAsString(), EsKeywordRequest.class);
-            list.add(keywordRequest.getSearchWord());
+        for (EsKeywordRequest item : hitsToList(response)) {
+            list.add(item.getSearchWord());
         }
         return Result.data(list);
     }
-    /**
-     *推荐视频查询
-     */
+
     @Override
     public List<RecommendVideo> likelyVideoRecommend(String videoId) throws IOException {
-        //使用了特定查询query--morelikethisquery来强化对关键字匹配度的查询
-        SearchRequest searchRequest = new SearchRequest(VIDEO_INDEX_NAME);
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
-        Item[] items = {
-                new Item(VIDEO_INDEX_NAME, videoId),
-        };
-        sourceBuilder.sort(ORDER_BY_SCORE, SortOrder.DESC);
-        sourceBuilder.query(QueryBuilders.moreLikeThisQuery(
-                        null,
-                        null,
-                        items
-                ).minTermFreq(1)
+        MoreLikeThisQuery mlt = MoreLikeThisQuery.of(m -> m
+                .fields(MULTI_QUERY_VIDEO_NAME, MULTI_QUERY_AUTHOR_NAME, MULTI_QUERY_INTRO)
+                .like(l -> l.document(d -> d.index(VIDEO_INDEX_NAME).id(videoId)))
+                .minTermFreq(1)
                 .maxQueryTerms(12));
+        SearchResponse<RecommendVideo> response = client.search(s -> s
+                        .index(VIDEO_INDEX_NAME)
+                        .query(Query.of(q -> q.moreLikeThis(mlt)))
+                        .sort(so -> so.score(sc -> sc.order(SortOrder.Desc))),
+                RecommendVideo.class);
         List<RecommendVideo> list = new ArrayList<>();
-        searchRequest.source(sourceBuilder);
-        SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
-        for (SearchHit searchHit : searchResponse.getHits().getHits()) {
-            RecommendVideo recommendVideo = objectMapper.readValue(searchHit.getSourceAsString(), RecommendVideo.class);
-            if (!recommendVideo.getVideoId().equals(videoId)) {
-                list.add(recommendVideo);
+        for (RecommendVideo item : hitsToList(response)) {
+            if (item.getVideoId() != null && !item.getVideoId().equals(videoId)) {
+                list.add(item);
             }
         }
         return list;
     }
-    /**
-     *创建索引
-     */
+
     @Override
     public Boolean createIndex(EsIndexRequest esIndexRequest) {
         try {
             String index = esIndexRequest.getIndexName();
-            Map<String, String> map = esIndexRequest.getProperties();
-            XContentBuilder builder = XContentFactory.jsonBuilder();
-            builder.startObject();
-            {
-                builder.startObject(INDEX_START_OBJECT_MAPPINGS);
-                {
-                    builder.startObject(INDEX_START_OBJECT_PROPERTIES);
-                    {
-                        // 添加其他字段
-                        for (Map.Entry<String, String> entry : map.entrySet()) {
-                            builder.startObject(entry.getKey());
-                            {
-                                builder.field(INDEX_FIELD_TYPE, entry.getValue());
-                            }
-                            builder.endObject();
-                        }
-                    }
-                    builder.endObject();
-                }
-                builder.endObject();
+            Map<String, Property> properties = new HashMap<>();
+            for (Map.Entry<String, String> entry : esIndexRequest.getProperties().entrySet()) {
+                String fieldType = entry.getValue();
+                properties.put(entry.getKey(), mapProperty(fieldType));
             }
-            builder.endObject();
-            CreateIndexRequest request = new CreateIndexRequest(index);
-            request.source(builder);
-            client.indices().create(request, RequestOptions.DEFAULT);
+            TypeMapping mapping = TypeMapping.of(m -> m.properties(properties));
+            client.indices().create(CreateIndexRequest.of(c -> c.index(index).mappings(mapping)));
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("createIndex failed", e);
         }
         return true;
     }
-    /**
-     *删除索引
-     */
+
     @Override
     public Boolean deleteIndex(String indexName) throws IOException {
-        GetIndexRequest getIndexRequest = new GetIndexRequest(indexName);
-        boolean exists = client.indices().exists(getIndexRequest, RequestOptions.DEFAULT);
+        boolean exists = client.indices().exists(ExistsRequest.of(e -> e.index(indexName))).value();
         if (exists) {
-            DeleteIndexRequest request = new DeleteIndexRequest(indexName);
-            client.indices().delete(request, RequestOptions.DEFAULT);
-            System.out.println("索引删除了");
+            client.indices().delete(DeleteIndexRequest.of(d -> d.index(indexName)));
+            log.info("索引已删除: {}", indexName);
         } else {
-            System.out.println("索引不存在");
+            log.info("索引不存在: {}", indexName);
         }
         return true;
     }
-}
 
+    private long countByMultiMatch(String index, String keyword, String... fields) throws IOException {
+        SearchResponse<Void> response = client.search(s -> s
+                        .index(index)
+                        .size(0)
+                        .trackTotalHits(t -> t.enabled(true))
+                        .minScore(1.0)
+                        .query(multiMatchQuery(keyword, fields)),
+                Void.class);
+        TotalHits total = response.hits().total();
+        if (total == null) {
+            return 0;
+        }
+        if (total.relation() == TotalHitsRelation.Eq) {
+            return total.value();
+        }
+        return total.value();
+    }
+
+    private static Query multiMatchQuery(String keyword, String... fields) {
+        return Query.of(q -> q.multiMatch(m -> m
+                .query(keyword)
+                .fields(Arrays.asList(fields))
+                .type(TextQueryType.MostFields)));
+    }
+
+    private static String resolveVideoSortField(Integer type) {
+        if (type == null || type == 0) {
+            return ORDER_BY_SCORE;
+        }
+        if (type == 1) {
+            return ORDER_BY_PLAY_COUNT;
+        }
+        if (type == 2) {
+            return ORDER_BY_CREATE_TIME;
+        }
+        return ORDER_BY_COLLECT_COUNT;
+    }
+
+    private static Property mapProperty(String type) {
+        if ("keyword".equalsIgnoreCase(type)) {
+            return Property.of(p -> p.keyword(k -> k));
+        }
+        if ("integer".equalsIgnoreCase(type) || "long".equalsIgnoreCase(type)) {
+            return Property.of(p -> p.integer(i -> i));
+        }
+        if ("date".equalsIgnoreCase(type)) {
+            return Property.of(p -> p.date(d -> d));
+        }
+        return Property.of(p -> p.text(t -> t));
+    }
+
+    private static <T> List<T> hitsToList(SearchResponse<T> response) {
+        List<T> list = new ArrayList<>();
+        if (response.hits() == null || response.hits().hits() == null) {
+            return list;
+        }
+        for (Hit<T> hit : response.hits().hits()) {
+            if (hit.source() != null) {
+                list.add(hit.source());
+            }
+        }
+        return list;
+    }
+}

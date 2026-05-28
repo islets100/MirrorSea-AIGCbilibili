@@ -38,9 +38,9 @@
         <gson.version>2.10.1</gson.version>
         <!-- 与 Spring Boot 2.6.x 对齐；勿用 3.x（需 Java 17） -->
         <spring-boot-starter-data-elasticsearch.version>2.6.11</spring-boot-starter-data-elasticsearch.version>
-        <elasticsearch-rest-high-level-client.version>7.13.3</elasticsearch-rest-high-level-client.version>
-        <elasticsearch-rest-client.version>7.13.3</elasticsearch-rest-client.version>
-        <elasticsearch.version>7.13.3</elasticsearch.version>
+        <elasticsearch-java.version>8.15.3</elasticsearch-java.version>
+        <elasticsearch-rest-client.version>8.15.3</elasticsearch-rest-client.version>
+        <langchain4j.version>0.36.2</langchain4j.version>
         <mybatis-plus-boot-starter.version>3.5.2</mybatis-plus-boot-starter.version>
         <jjwt.version>0.9.1</jjwt.version>
         <minio.version>8.2.1</minio.version>
@@ -69,9 +69,11 @@
         <httpclient.version>4.5.13</httpclient.version>
         <spring-boot-starter-aop.version>2.6.11</spring-boot-starter-aop.version>
         <druid.version>1.2.12</druid.version>
-        <xxl-job-core.version>2.3.1</xxl-job-core.version>
+        <!-- 2.5.0：JDK8 最后大版本，含 2.4.2 之后的安全与权限修复 -->
+        <xxl-job-core.version>2.5.0</xxl-job-core.version>
         <javase.version>3.5.1</javase.version>
-        <guava.version>22.0</guava.version>
+        <!-- Java 8：32.1.3-jre 修复 guava 22.x 已知 CVE（OSV MEDIUM） -->
+        <guava.version>32.1.3-jre</guava.version>
         <jave-all-deps.version>3.3.1</jave-all-deps.version>
         <!-- Java 8 兼容：Tika 2.x 最后支持 JDK8 的分支；勿升到 Tika 3.x（需 Java 17） -->
         <tika.version>2.9.2</tika.version>
@@ -298,9 +300,9 @@
                 <version>${spring-boot-starter-data-elasticsearch.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.elasticsearch</groupId>
-                <artifactId>elasticsearch</artifactId>
-                <version>${elasticsearch.version}</version>
+                <groupId>co.elastic.clients</groupId>
+                <artifactId>elasticsearch-java</artifactId>
+                <version>${elasticsearch-java.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.elasticsearch.client</groupId>
@@ -308,10 +310,36 @@
                 <version>${elasticsearch-rest-client.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.elasticsearch.client</groupId>
-                <artifactId>elasticsearch-rest-high-level-client</artifactId>
-                <version>${elasticsearch-rest-high-level-client.version}</version>
-
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-bom</artifactId>
+                <version>${langchain4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-core</artifactId>
+                <version>${langchain4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j</artifactId>
+                <version>${langchain4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-elasticsearch</artifactId>
+                <version>${langchain4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-embeddings-bge-small-zh-q</artifactId>
+                <version>${langchain4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-document-parser-apache-tika</artifactId>
+                <version>${langchain4j.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
